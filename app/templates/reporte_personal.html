@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Personal</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        table, th, td { border: 1px solid black; }
+        th, td { padding: 10px; text-align: center; }
+        .summary { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Reporte de Personal</h1>
+    <h2>Distribución y Eficiencia del Personal de Mantenimiento</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Título</th>
+                <th>Cantidad de Operarios</th>
+                <th>Cantidad de Mantenimientos</th>
+                <th>Eficiencia (%)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in data %}
+            <tr>
+                <td>{{ item.titulo }}</td>
+                <td>{{ item.cantidad_operarios }}</td>
+                <td>{{ item.cantidad_mantenimientos }}</td>
+                <td>{{ item.eficiencia }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="summary">
+        <p>Total de empleados: {{ total_operarios }}</p>
+        <p>Total de mantenimientos: {{ total_mantenimientos }}</p>
+        <p>Eficiencia promedio global: {{ eficiencia_promedio_global }}%</p>
+    </div>
+</body>
+</html>

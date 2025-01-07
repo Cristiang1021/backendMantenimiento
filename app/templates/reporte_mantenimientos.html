@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Mantenimientos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+        }
+        h1, h2, h3 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        p {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .chart {
+            text-align: center;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            text-align: center;
+            padding: 8px;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        .summary {
+            margin-top: 20px;
+            text-align: left;
+            font-size: 1.1em;
+        }
+        .summary h3 {
+            margin-bottom: 10px;
+        }
+        .summary p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reporte de Mantenimientos</h1>
+    <p>Resumen de mantenimientos realizados en los últimos meses.</p>
+
+    <!-- Gráfico -->
+    <div class="chart">
+        {% if grafico_mantenimientos %}
+            <img src="{{ grafico_mantenimientos }}" alt="Gráfico de Mantenimientos">
+        {% else %}
+            <p>No se pudo generar el gráfico.</p>
+        {% endif %}
+    </div>
+
+    <!-- Tabla de Datos -->
+    <table>
+        <thead>
+            <tr>
+                <th>Mes</th>
+                <th>Preventivos</th>
+                <th>Correctivos</th>
+                <th>Predictivos</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mantenimiento in mantenimientos %}
+            <tr>
+                <td>{{ mantenimiento.mes }}</td>
+                <td>{{ mantenimiento.preventivos }}</td>
+                <td>{{ mantenimiento.correctivos }}</td>
+                <td>{{ mantenimiento.predictivos }}</td>
+                <td>{{ mantenimiento.total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Resumen -->
+    <div class="summary">
+        <h3>Resumen</h3>
+        <p><strong>Total de Mantenimientos:</strong> {{ total_mantenimientos }}</p>
+        <p><strong>Eficiencia Promedio:</strong> {{ eficiencia_promedio }}%</p>
+    </div>
+</body>
+</html>
