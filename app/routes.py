@@ -2,6 +2,8 @@ import base64
 import io
 import smtplib
 import matplotlib
+from sqlalchemy.exc import IntegrityError
+
 matplotlib.use('Agg')  # Establecer el backend a 'Agg' para evitar problemas de GUI
 
 import traceback
@@ -23,7 +25,73 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app import mail  # Importa la instancia de Flask-Mail
 from flask_mail import Message  # Importa Message para enviar correos
 
+####### TITULOS #######
+# Obtener todos los títulos
+@app.route('/titulos', methods=['GET'])
+@jwt_required()
+def obtener_titulos():
+    titulos = Titulo.query.all()
+    return jsonify([{"id_titulo": Titulo.id_titulo, "nombre": Titulo.nombre} for Titulo in titulos]), 200
 
+
+# Crear un nuevo título
+@app.route('/titulo', methods=['POST'])
+@jwt_required()
+def crear_titulo():
+    data = request.get_json()
+    if not data or not data.get('nombre'):
+        return jsonify({'mensaje': 'El nombre del título es obligatorio'}), 400
+
+    nuevo_titulo = Titulo(nombre=data['nombre'])
+    db.session.add(nuevo_titulo)
+    db.session.commit()
+    return jsonify({'mensaje': 'Título creado exitosamente'}), 201
+
+# Actualizar un título
+@app.route('/titulo/<int:id_titulo>', methods=['PUT'])
+@jwt_required()
+def actualizar_titulo(id_titulo):
+    titulo = Titulo.query.get_or_404(id_titulo)
+    data = request.get_json()
+
+    if not data or not data.get('nombre'):
+        return jsonify({'mensaje': 'El nombre del título es obligatorio'}), 400
+
+    titulo.nombre = data['nombre']
+    db.session.commit()
+    return jsonify({'mensaje': 'Título actualizado exitosamente'}), 200
+
+# Eliminar un título
+@app.route('/titulo/<int:id_titulo>', methods=['DELETE'])
+@jwt_required()
+def eliminar_titulo(id_titulo):
+    try:
+        titulo = Titulo.query.get_or_404(id_titulo)
+
+        # Verificar si el título está relacionado con otra entidad
+        if titulo.usuarios:  # Supongamos que hay una relación entre Titulo y Usuario
+            return jsonify({'mensaje': 'No se puede eliminar este título porque está asociado a usuarios.'}), 400
+
+        db.session.delete(titulo)
+        db.session.commit()
+
+        return jsonify({'mensaje': 'Título eliminado exitosamente'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'mensaje': f'Error al eliminar el título: {str(e)}'}), 500
+
+
+################ ROLES #############################
+@app.route('/roles', methods=['GET'])
+@jwt_required()
+def obtener_roles():
+    roles = Rol.query.all()
+    return jsonify([{"id_rol": rol.id_rol, "nombre": rol.nombre} for rol in roles]), 200
+
+
+
+
+################### USUARIOS #######################
 # Ruta protegida para usuarios autenticados
 @app.route('/protected', methods=['GET'])
 @jwt_required()  # Protección de la ruta
@@ -51,6 +119,7 @@ def obtener_usuarios():
         "telefono": usuario.telefono,
         "email": usuario.email,
         "rol": usuario.rol.nombre,
+        "titulo": usuario.titulo.nombre if usuario.titulo else None,  # Incluimos el nombre del título
         "estado_usuario": usuario.estado_usuario
     } for usuario in usuarios]
     return jsonify(resultado), 200
@@ -62,10 +131,20 @@ def obtener_usuarios():
 @jwt_required()
 def eliminar_usuario(id_usuario):
     usuario = Usuario.query.get_or_404(id_usuario)
-    db.session.delete(usuario)
-    db.session.commit()
 
-    return jsonify({"mensaje": "Usuario eliminado con éxito."}), 200
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({"mensaje": "Usuario eliminado con éxito."}), 200
+    except IntegrityError as e:
+        db.session.rollback()
+        # Devolver un mensaje claro en caso de violación de clave foránea
+        return jsonify(
+            {"mensaje": "No se puede eliminar el usuario porque tiene registros asociados (accesos, mantenimientos, etc.)."}), 400
+    except Exception as e:
+        db.session.rollback()
+        # Manejo genérico de otros errores
+        return jsonify({"mensaje": f"Error inesperado: {str(e)}"}), 500
 
 
 # Activar un usuario
@@ -85,7 +164,7 @@ def obtener_usuario_por_cedula(cedula):
     usuario = Usuario.query.filter_by(cedula=cedula).first_or_404()
     foto_perfil_base64 = base64.b64encode(usuario.foto).decode('utf-8') if usuario.foto else None
 
-    return jsonify({
+    respuesta = {
         "nombres": usuario.nombres,
         "apellidos": usuario.apellidos,
         "cedula": usuario.cedula,
@@ -93,10 +172,15 @@ def obtener_usuario_por_cedula(cedula):
         "email": usuario.email,
         "genero": usuario.genero,
         "rol": usuario.rol.nombre,
+        "titulo": {
+            "id": usuario.titulo.id_titulo if usuario.titulo else None,
+            "nombre": usuario.titulo.nombre if usuario.titulo else None
+        },
         "estado_usuario": usuario.estado_usuario,
         "fecha_registro": usuario.fecha_registro.strftime("%Y-%m-%d"),
         'foto_perfil': foto_perfil_base64
-    })
+    }
+    return jsonify(respuesta)
 
 
 # Ruta para editar un usuario por su cédula
@@ -160,51 +244,6 @@ def agregar_contacto(cedula):
     db.session.commit()
 
     return jsonify({"mensaje": "Contacto agregado exitosamente."}), 201
-
-####### TITULOS #######
-# Obtener todos los títulos
-@app.route('/titulos', methods=['GET'])
-@jwt_required()
-def obtener_titulos():
-    titulos = Titulo.query.all()
-    titulos_data = [{'id_titulo': t.id_titulo, 'nombre': t.nombre} for t in titulos]
-    return jsonify(titulos_data), 200
-
-# Crear un nuevo título
-@app.route('/titulo', methods=['POST'])
-@jwt_required()
-def crear_titulo():
-    data = request.get_json()
-    if not data or not data.get('nombre'):
-        return jsonify({'mensaje': 'El nombre del título es obligatorio'}), 400
-
-    nuevo_titulo = Titulo(nombre=data['nombre'])
-    db.session.add(nuevo_titulo)
-    db.session.commit()
-    return jsonify({'mensaje': 'Título creado exitosamente'}), 201
-
-# Actualizar un título
-@app.route('/titulo/<int:id_titulo>', methods=['PUT'])
-@jwt_required()
-def actualizar_titulo(id_titulo):
-    titulo = Titulo.query.get_or_404(id_titulo)
-    data = request.get_json()
-
-    if not data or not data.get('nombre'):
-        return jsonify({'mensaje': 'El nombre del título es obligatorio'}), 400
-
-    titulo.nombre = data['nombre']
-    db.session.commit()
-    return jsonify({'mensaje': 'Título actualizado exitosamente'}), 200
-
-# Eliminar un título
-@app.route('/titulo/<int:id_titulo>', methods=['DELETE'])
-@jwt_required()
-def eliminar_titulo(id_titulo):
-    titulo = Titulo.query.get_or_404(id_titulo)
-    db.session.delete(titulo)
-    db.session.commit()
-    return jsonify({'mensaje': 'Título eliminado exitosamente'}), 200
 
 
 
@@ -275,9 +314,15 @@ def actualizar_herramienta(id_herramienta):
 @jwt_required()
 def eliminar_herramienta(id_herramienta):
     herramienta = Herramienta.query.get_or_404(id_herramienta)
+
+    # Comprobar si la herramienta está asociada a algún mantenimiento
+    if herramienta.mantenimientos:  # Cambia según tu relación definida en los modelos
+        return jsonify({"mensaje": "No se puede eliminar la herramienta porque está asociada a un mantenimiento activo."}), 400
+
     db.session.delete(herramienta)
     db.session.commit()
     return jsonify({"mensaje": "Herramienta eliminada con éxito"}), 200
+
 
 # Obtener una herramienta específica por ID
 @app.route('/herramientas/<int:id_herramienta>', methods=['GET'])
@@ -1545,3 +1590,96 @@ def generar_reporte_personal():
     except Exception as e:
         print(f"Error generando el reporte de personal: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/reporte/mantenimiento/<int:id_mantenimiento>', methods=['GET'])
+@jwt_required()
+def generar_informe_mantenimiento(id_mantenimiento):
+    fecha_actual = datetime.now()
+    try:
+        # Obtener el mantenimiento y sus detalles
+        mantenimiento = Mantenimiento.query.get_or_404(id_mantenimiento)
+
+        # Validar que existan relaciones requeridas
+        maquinaria = mantenimiento.maquinaria
+        operario = mantenimiento.usuario
+        historial_estados = mantenimiento.historial_estados or []
+        herramientas = mantenimiento.herramientas or []
+
+        # Formatear los datos del historial de estados
+        historial = [
+            {
+                "estado": h.estado,
+                "observacion": h.observacion or "Sin observaciones",
+                "fecha_estado": h.fecha_estado.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            for h in historial_estados
+        ]
+
+        # Formatear los datos de las herramientas usadas
+        herramientas_usadas = []
+        for herramienta in herramientas:
+            detalle = db.session.query(mantenimiento_herramienta).filter_by(
+                id_mantenimiento=mantenimiento.id_mantenimiento,
+                id_herramienta=herramienta.id_herramienta
+            ).first()
+
+            if detalle:
+                herramientas_usadas.append({
+                    "nombre": herramienta.nombre,
+                    "tipo": herramienta.tipo,
+                    "cantidad_usada": detalle.cantidad_usada
+                })
+
+        # Validar operario
+        operario_data = {
+            "nombre": f"{operario.nombres if operario else ''} {operario.apellidos if operario else ''}".strip(),
+            "titulo": {operario.titulo.nombre if operario and operario.titulo else 'No definido'},
+            "email": operario.email if operario else "No definido",
+            "telefono": operario.telefono if operario else "No definido"
+        } if operario else {
+            "nombre": "No asignado",
+            "email": "No definido",
+            "telefono": "No definido"
+        }
+
+        # Validar maquinaria
+        maquinaria_data = {
+            "nombre": maquinaria.nombre if maquinaria else "No asignada",
+            "numero_serie": maquinaria.numero_serie if maquinaria else "No definido",
+            "modelo": maquinaria.modelo if maquinaria else "No definido",
+            "descripcion": maquinaria.descripcion or "Sin descripción"
+        } if maquinaria else {
+            "nombre": "No asignada",
+            "numero_serie": "No definido",
+            "modelo": "No definido",
+            "descripcion": "Sin descripción"
+        }
+
+        # Preparar los datos para la plantilla del informe
+        datos_informe = {
+            "codigo_mantenimiento": f"MT-{mantenimiento.id_mantenimiento}",
+            "maquinaria": maquinaria_data,
+            "operario": operario_data,
+            "tipo_mantenimiento": mantenimiento.tipo_mantenimiento or "No definido",
+            "descripcion": mantenimiento.descripcion or "Sin descripción",
+            "estado_actual": mantenimiento.estado_actual or "No definido",
+            "historial_estados": historial,
+            "herramientas_usadas": herramientas_usadas,
+            "fecha_mantenimiento": mantenimiento.fecha_mantenimiento.strftime("%Y-%m-%d") if mantenimiento.fecha_mantenimiento else "No definida",
+            "proxima_fecha": mantenimiento.proxima_fecha.strftime("%Y-%m-%d") if mantenimiento.proxima_fecha else "No definida"
+        }
+
+        # Renderizar la plantilla HTML con los datos
+        contenido = render_template("reporte_mantenimiento.html", **datos_informe, fecha_actual=fecha_actual)
+
+        # Generar el PDF
+        pdf = pdfkit.from_string(contenido, False)
+        response = make_response(pdf)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = f"inline; filename=informe_mantenimiento_MT-{mantenimiento.id_mantenimiento}.pdf"
+        return response
+
+    except Exception as e:
+        print(f"Error generando el informe de mantenimiento: {e}")
+        return jsonify({"error": "No se pudo generar el informe. Verifica los datos del mantenimiento."}), 500
