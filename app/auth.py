@@ -51,7 +51,7 @@ def register():
 
     if total_usuarios == 0:
         rol = Rol.query.filter_by(nombre='administrador').first()
-        estado_usuario = 'activo'
+        estado_usuario = 'Activo'
     else:
         rol = Rol.query.filter_by(nombre='operario').first()
         estado_usuario = 'pendiente'
@@ -91,7 +91,7 @@ def register():
     if not correo_enviado:
         print("Error: El correo no pudo ser enviado, pero el registro fue exitoso.")
 
-    if estado_usuario == 'activo':
+    if estado_usuario == 'activo' or estado_usuario == 'Activo':
         return jsonify({'message': 'Usuario registrado y activado exitosamente como administrador.'}), 201
     else:
         return jsonify({'message': 'Usuario registrado exitosamente. Tu cuenta sera activada por un administrador.'}), 201
@@ -102,6 +102,7 @@ def login():
     if request.method == 'OPTIONS':
         response = jsonify({"message": "CORS Preflight Passed"})
         #response.headers.add("Access-Control-Allow-Origin", "https://mantenimientofrond.ngrok.app")
+        #response.headers.add("Access-Control-Allow-Origin", "http://127.0.0.1:3000")
         response.headers.add("Access-Control-Allow-Origin", "https://mantenimientoapp.vercel.app")
         response.headers.add("Access-Control-Allow-Credentials", "true")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
@@ -119,7 +120,7 @@ def login():
     ).first()
 
     if usuario and bcrypt.checkpw(password.encode('utf-8'), usuario.password.encode('utf-8')):
-        if usuario.estado_usuario != 'Activo':
+        if usuario.estado_usuario != 'activo' or usuario.estado_usuario == 'Activo':
             return jsonify({"mensaje": "Tu cuenta aún no ha sido activada"}), 403
 
         # Crear el token de acceso JWT con expiración de 6 horas

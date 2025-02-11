@@ -1405,6 +1405,7 @@ def obtener_operarios_destacados():
 @app.route('/api/admin/reporte/<tipo_reporte>', methods=['GET'])
 @jwt_required()
 def generar_reporte(tipo_reporte):
+    fecha_actual = datetime.now()
     try:
         if tipo_reporte == "mantenimientos":
             mantenimientos = db.session.query(
@@ -1434,7 +1435,7 @@ def generar_reporte(tipo_reporte):
                 func.avg(Mantenimiento.tiempo_requerido).label('eficiencia')
             ).join(Mantenimiento, Maquinaria.id_maquinaria == Mantenimiento.id_maquinaria).group_by(Maquinaria.id_maquinaria, Maquinaria.nombre).all()
 
-            contenido = render_template("reporte_eficiencia.html", eficiencia=eficiencia)
+            contenido = render_template("reporte_eficiencia.html", eficiencia=eficiencia, fecha_actual=fecha_actual)
 
         else:
             return jsonify({"message": "Tipo de reporte no soportado"}), 400
@@ -1451,6 +1452,7 @@ def generar_reporte(tipo_reporte):
 @app.route('/api/admin/reporte/mantenimientos', methods=['GET'])
 @jwt_required()
 def generar_reporte_mantenimientos():
+    fecha_actual = datetime.now()
     try:
         print("Generando reporte de mantenimientos...")
 
@@ -1512,7 +1514,8 @@ def generar_reporte_mantenimientos():
             mantenimientos=datos_mantenimientos,
             total_mantenimientos=total_mantenimientos,
             eficiencia_promedio =eficiencia_promedio,
-            grafico_mantenimientos=grafico_mantenimientos
+            grafico_mantenimientos=grafico_mantenimientos,
+            fecha_actual=fecha_actual
         )
 
         # Generar el PDF
@@ -1528,6 +1531,7 @@ def generar_reporte_mantenimientos():
 @app.route('/api/admin/reporte/personal', methods=['GET'])
 @jwt_required()
 def generar_reporte_personal():
+    fecha_actual = datetime.now()
     try:
         print("Generando reporte de personal...")
 
@@ -1577,7 +1581,8 @@ def generar_reporte_personal():
             data=data,
             total_operarios=total_operarios,
             total_mantenimientos=total_mantenimientos,
-            eficiencia_promedio_global=round(eficiencia_promedio_global, 2)
+            eficiencia_promedio_global=round(eficiencia_promedio_global, 2),
+            fecha_actual=fecha_actual
         )
 
         # Generar el PDF
@@ -1634,7 +1639,7 @@ def generar_informe_mantenimiento(id_mantenimiento):
         # Validar operario
         operario_data = {
             "nombre": f"{operario.nombres if operario else ''} {operario.apellidos if operario else ''}".strip(),
-            "titulo": {operario.titulo.nombre if operario and operario.titulo else 'No definido'},
+            "titulo": operario.titulo.nombre if operario and operario.titulo else 'No definido',
             "email": operario.email if operario else "No definido",
             "telefono": operario.telefono if operario else "No definido"
         } if operario else {
