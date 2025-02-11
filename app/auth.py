@@ -120,7 +120,7 @@ def login():
     ).first()
 
     if usuario and bcrypt.checkpw(password.encode('utf-8'), usuario.password.encode('utf-8')):
-        if usuario.estado_usuario != 'activo' or usuario.estado_usuario == 'Activo':
+        if usuario.estado_usuario != 'activo' or usuario.estado_usuario != 'Activo':
             return jsonify({"mensaje": "Tu cuenta aún no ha sido activada"}), 403
 
         # Crear el token de acceso JWT con expiración de 6 horas
