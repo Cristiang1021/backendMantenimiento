@@ -179,4 +179,9 @@ class ConfiguracionNotificaciones(db.Model):
     created_at = db.Column(db.DateTime, default=db.func.now())
 
 
-
+# RECUPERAR CONTRASEÑAS CON CODIGO
+class CodigoRecuperacion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False)
+    codigo = db.Column(db.String(6), nullable=False)
+    expiracion = db.Column(db.DateTime, nullable=False)

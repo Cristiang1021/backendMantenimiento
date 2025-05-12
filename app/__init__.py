@@ -27,8 +27,8 @@ def check_if_token_in_blacklist(jwt_header, jwt_payload):
 
 # Configuración de CORS
 #CORS(app, resources={r"/*": {"origins": ["https://mantenimientofrond.ngrok.app", "https://mantenimientofrond.ngrok.app"]}}, supports_credentials=True)
-CORS(app, resources={r"/*": {"origins": ["https://mantenimientoapp.vercel.app", "https://mantenimientoapp.vercel.app"]}}, supports_credentials=True)
-#CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:3000", "http://localhost:3000"]}}, supports_credentials=True)
+#CORS(app, resources={r"/*": {"origins": ["https://mantenimientoapp.vercel.app", "https://mantenimientoapp.vercel.app"]}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": ["http://127.0.0.1:3000", "http://localhost:3000"]}}, supports_credentials=True)
 # Maneja el preflight request y permite CORS
 @app.after_request
 def after_request(response):

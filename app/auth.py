@@ -1,6 +1,11 @@
+import random
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from flask import request, jsonify
 from app import app, db, blacklist, jwt  # Importamos la lista negra desde `__init__.py`
-from app.models import Usuario, Rol, Acceso, Notificacion
+from app.models import Usuario, Rol, Acceso, Notificacion, CodigoRecuperacion, ConfiguracionNotificaciones
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt
 import bcrypt
 from datetime import timedelta, datetime
@@ -102,8 +107,8 @@ def login():
     if request.method == 'OPTIONS':
         response = jsonify({"message": "CORS Preflight Passed"})
         #response.headers.add("Access-Control-Allow-Origin", "https://mantenimientofrond.ngrok.app")
-        #response.headers.add("Access-Control-Allow-Origin", "http://127.0.0.1:3000")
-        response.headers.add("Access-Control-Allow-Origin", "https://mantenimientoapp.vercel.app")
+        response.headers.add("Access-Control-Allow-Origin", "http://127.0.0.1:3000")
+        #response.headers.add("Access-Control-Allow-Origin", "https://mantenimientoapp.vercel.app")
         response.headers.add("Access-Control-Allow-Credentials", "true")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
@@ -179,3 +184,160 @@ def check_auth():
         return jsonify({"mensaje": "Token expirado"}), 401
     except Exception as e:
         return jsonify({"mensaje": "Token inválido"}), 401
+
+
+## RECUPERAR LA CONTRASEÑA
+
+
+# Enviar correo con HTML (sin tildes) usando la configuracion SMTP de la base de datos
+def enviar_codigo_recuperacion_por_correo(destinatario, codigo):
+    config = ConfiguracionNotificaciones.query.first()
+    if not config:
+        print("No hay configuracion SMTP.")
+        return False
+
+    try:
+        # Cuerpo HTML sin tildes
+        mensaje = f"""
+        <!DOCTYPE html>
+        <html lang=\"es\">
+        <head>
+            <meta charset=\"UTF-8\">
+            <style>
+                body {{ font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px; }}
+                .container {{ background-color: #fff; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto; }}
+                h2 {{ color: #0056b3; }}
+                .codigo {{ font-size: 1.5em; font-weight: bold; background-color: #eee; padding: 10px; border-radius: 5px; text-align: center; }}
+                .footer {{ font-size: 0.8em; color: #888; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class=\"container\">
+                <h2>Recuperacion de contrasena</h2>
+                <p>Has solicitado recuperar el acceso a tu cuenta en <strong>Ingema 3R</strong>.</p>
+                <p>Utiliza el siguiente codigo de verificacion. Tiene una validez de 10 minutos:</p>
+                <div class=\"codigo\">{codigo}</div>
+                <p>Si no solicitaste este cambio, puedes ignorar este mensaje.</p>
+                <p class=\"footer\">Este correo fue generado automaticamente. No respondas a este mensaje.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg = MIMEMultipart()
+        msg["From"] = config.email
+        msg["To"] = destinatario
+        msg["Subject"] = "Codigo de recuperacion de contrasena"
+        msg.attach(MIMEText(mensaje, "html", "utf-8"))
+
+        server = smtplib.SMTP(config.smtp_server, config.smtp_port)
+        server.starttls()
+        server.login(config.email, config.smtp_password)
+        server.sendmail(config.email, destinatario, msg.as_string())
+        server.quit()
+
+        return True
+    except Exception as e:
+        print("Error al enviar el correo de recuperacion:", str(e))
+        return False
+
+# Ruta para enviar el codigo de recuperacion
+@app.route('/enviar-codigo-recuperacion', methods=['POST'])
+def enviar_codigo():
+    data = request.get_json()
+    identificador = data.get("email")  # puede ser correo o cédula
+
+    if not identificador:
+        return jsonify({
+            "mensaje": "Por favor, ingrese su correo electrónico o número de cédula."
+        }), 400
+
+    # Buscar por correo o cédula
+    usuario = Usuario.query.filter(
+        (Usuario.email == identificador) | (Usuario.cedula == identificador)
+    ).first()
+
+    if not usuario:
+        return jsonify({
+            "mensaje": "No se encontró ningún usuario registrado con las credenciales ingresadas."
+        }), 404
+
+    codigo = str(random.randint(100000, 999999))
+    expiracion = datetime.utcnow() + timedelta(minutes=10)
+
+    try:
+        # Eliminar códigos anteriores y guardar nuevo
+        CodigoRecuperacion.query.filter_by(email=usuario.email).delete()
+        nuevo_codigo = CodigoRecuperacion(
+            email=usuario.email,
+            codigo=codigo,
+            expiracion=expiracion
+        )
+        db.session.add(nuevo_codigo)
+        db.session.commit()
+    except Exception as e:
+        print("Error en DB al guardar código:", e)
+        return jsonify({
+            "mensaje": "Se produjo un error interno al generar el código de recuperación. Intente nuevamente más tarde o contacte al soporte técnico."
+        }), 500
+
+    enviado = enviar_codigo_recuperacion_por_correo(usuario.email, codigo)
+    if not enviado:
+        return jsonify({
+            "mensaje": "No se pudo enviar el código de verificación en este momento. Por favor, intente nuevamente más tarde."
+        }), 500
+
+    return jsonify({
+        "mensaje": "Hemos enviado un código de verificación a su correo electrónico. Por favor, revise su bandeja de entrada o carpeta de spam."
+    }), 200
+
+
+
+# Ruta para verificar el codigo y cambiar la contrasena
+@app.route('/verificar-codigo-recuperacion', methods=['POST'])
+def verificar_codigo_recuperacion():
+    import bcrypt
+
+    data = request.get_json()
+    identificador = data.get("email")  # puede ser correo o cédula
+    codigo = data.get("codigo")
+    nueva_password = data.get("nueva_password")  # Puede ser None si solo se valida el código
+
+    if not identificador or not codigo:
+        return jsonify({
+            "mensaje": "Debe ingresar su correo o cédula y el código de verificación."
+        }), 400
+
+    # Buscar usuario por correo o cédula
+    usuario = Usuario.query.filter(
+        (Usuario.email == identificador) | (Usuario.cedula == identificador)
+    ).first()
+
+    if not usuario:
+        return jsonify({
+            "mensaje": "No se encontró ningún usuario registrado con las credenciales ingresadas."
+        }), 404
+
+    # Validar el código asociado al correo real del usuario
+    registro = CodigoRecuperacion.query.filter_by(email=usuario.email, codigo=codigo).first()
+
+    if not registro or registro.expiracion < datetime.utcnow():
+        return jsonify({
+            "mensaje": "El código ingresado no es válido o ha expirado. Solicite uno nuevo e intente nuevamente."
+        }), 400
+
+    # Si no se ha enviado una nueva contraseña, solo se está validando el código
+    if not nueva_password:
+        return jsonify({
+            "mensaje": "Código verificado correctamente. Puede proceder a establecer una nueva contraseña."
+        }), 200
+
+    # Cambiar la contraseña
+    usuario.password = bcrypt.hashpw(nueva_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    db.session.delete(registro)
+    db.session.commit()
+
+    return jsonify({
+        "mensaje": "La contraseña se ha actualizado correctamente. Ahora puede iniciar sesión con sus nuevas credenciales."
+    }), 200
+
