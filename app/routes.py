@@ -1533,68 +1533,61 @@ def generar_reporte_mantenimientos():
 def generar_reporte_personal():
     fecha_actual = datetime.now()
     try:
-        print("Generando reporte de personal...")
+        print("Generando reporte detallado de personal...")
 
-        # Query principal
-        resultado = db.session.query(
-            Titulo.nombre.label("titulo"),
-            func.count(Usuario.id_usuario.distinct()).label("cantidad_operarios"),  # Contar usuarios únicos
-            func.count(Mantenimiento.id_mantenimiento).label("cantidad_mantenimientos"),
-            func.coalesce(
-                func.avg(
-                    case(
-                        (Mantenimiento.estado_actual.ilike("completado"), 1),
-                        else_=0
-                    )
-                ) * 100, 0
-            ).label("eficiencia")
-        ).join(Usuario, Usuario.id_titulo == Titulo.id_titulo) \
-         .outerjoin(Mantenimiento, Mantenimiento.id_usuario == Usuario.id_usuario) \
-         .group_by(Titulo.nombre).all()
+        usuarios = Usuario.query \
+            .filter(Usuario.id_rol == 2) \
+            .outerjoin(Mantenimiento, Mantenimiento.id_usuario == Usuario.id_usuario) \
+            .all()
 
-        # Preparar datos para la plantilla
         data = []
-        total_operarios = 0
-        total_mantenimientos = 0
-        eficiencia_promedio_global = 0
+        for usuario in usuarios:
+            mantenimientos = [m for m in usuario.mantenimientos]
+            total_mantenimientos = len(mantenimientos)
+            completados = sum(1 for m in mantenimientos if m.estado_actual and m.estado_actual.lower() == "completado")
 
-        for row in resultado:
-            total_operarios += row.cantidad_operarios
-            total_mantenimientos += row.cantidad_mantenimientos
-            eficiencia_promedio_global += row.eficiencia
+            eficiencia = (completados / total_mantenimientos * 100) if total_mantenimientos > 0 else 0
+
             data.append({
-                "titulo": row.titulo,
-                "cantidad_operarios": row.cantidad_operarios,
-                "cantidad_mantenimientos": row.cantidad_mantenimientos,
-                "eficiencia": round(row.eficiencia, 2)
+                "nombres": usuario.nombres,
+                "apellidos": usuario.apellidos,
+                "cedula": usuario.cedula,
+                "email": usuario.email,
+                "telefono": usuario.telefono,
+                "titulo": usuario.titulo.nombre if usuario.titulo else "Sin título",
+                "total_mantenimientos": total_mantenimientos,
+                "eficiencia": round(eficiencia, 2)
             })
 
-        eficiencia_promedio_global = eficiencia_promedio_global / len(data) if data else 0
-
-        # Verificar si los datos fueron recuperados correctamente
-        if not data:
-            print("No se encontraron datos para el reporte de personal.")
-
-        # Renderizar el HTML
+        # Renderizar plantilla
         contenido = render_template(
             "reporte_personal.html",
             data=data,
-            total_operarios=total_operarios,
-            total_mantenimientos=total_mantenimientos,
-            eficiencia_promedio_global=round(eficiencia_promedio_global, 2),
             fecha_actual=fecha_actual
         )
 
-        # Generar el PDF
-        pdf = pdfkit.from_string(contenido, False)
+        # 👉 Aquí está el cambio: PDF en horizontal
+        options = {
+            "page-size": "A4",
+            "orientation": "Landscape",
+            "encoding": "UTF-8",
+            "margin-top": "0.75in",
+            "margin-right": "0.75in",
+            "margin-bottom": "0.75in",
+            "margin-left": "0.75in"
+        }
+
+        pdf = pdfkit.from_string(contenido, False, options=options)
         response = make_response(pdf)
         response.headers["Content-Type"] = "application/pdf"
-        response.headers["Content-Disposition"] = "inline; filename=reporte_personal.pdf"
+        response.headers["Content-Disposition"] = "inline; filename=reporte_detallado_personal.pdf"
         return response
 
     except Exception as e:
-        print(f"Error generando el reporte de personal: {e}")
+        print(f"Error generando el reporte detallado de personal: {e}")
         return jsonify({"error": str(e)}), 500
+
+
 
 
 @app.route('/api/reporte/mantenimiento/<int:id_mantenimiento>', methods=['GET'])

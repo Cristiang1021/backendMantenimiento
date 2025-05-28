@@ -108,6 +108,7 @@ def login():
         response = jsonify({"message": "CORS Preflight Passed"})
         #response.headers.add("Access-Control-Allow-Origin", "https://mantenimientofrond.ngrok.app")
         #response.headers.add("Access-Control-Allow-Origin", "http://127.0.0.1:3000")
+        #response.headers.add("Access-Control-Allow-Origin", "https://g1zlbnml-3000.use.devtunnels.ms")
         response.headers.add("Access-Control-Allow-Origin", "https://mantenimientoapp.vercel.app")
         response.headers.add("Access-Control-Allow-Credentials", "true")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
